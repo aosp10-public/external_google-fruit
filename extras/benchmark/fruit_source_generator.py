@@ -13,23 +13,36 @@
 # limitations under the License.
 
 
-class FruitSourceGenerator:
-    def __init__(self, use_fruit_2_x_syntax=False):
-        self.use_fruit_2_x_syntax = use_fruit_2_x_syntax
+def generate_files(injection_graph, generate_runtime_bench_code, use_normalized_component=False):
+    if use_normalized_component:
+        assert not generate_runtime_bench_code
 
-    def _get_component_type(self, component_index):
-        if self.use_fruit_2_x_syntax:
-            return 'const fruit::Component<Interface{component_index}>&'.format(**locals())
-        else:
-            return 'fruit::Component<Interface{component_index}>'.format(**locals())
+    file_content_by_name = dict()
 
-    def generate_component_header(self, component_index):
-        component_type = self._get_component_type(component_index)
-        template = """
+    for node_id in injection_graph.nodes_iter():
+        file_content_by_name['component%s.h' % node_id] = _generate_component_header(node_id)
+        file_content_by_name['component%s.cpp' % node_id] = _generate_component_source(node_id, injection_graph.successors(node_id))
+
+    [toplevel_node] = [node_id
+                       for node_id in injection_graph.nodes_iter()
+                       if not injection_graph.predecessors(node_id)]
+    file_content_by_name['main.cpp'] = _generate_main(toplevel_node, generate_runtime_bench_code)
+
+    return file_content_by_name
+
+def _get_component_type(component_index):
+    return 'fruit::Component<Interface{component_index}>'.format(**locals())
+
+def _generate_component_header(component_index):
+    component_type = _get_component_type(component_index)
+    template = """
 #ifndef COMPONENT{component_index}_H
 #define COMPONENT{component_index}_H
 
 #include <fruit/fruit.h>
+
+// Example include that the code might use
+#include <vector>
 
 struct Interface{component_index} {{
   virtual ~Interface{component_index}() = default;
@@ -39,116 +52,51 @@ struct Interface{component_index} {{
 
 #endif // COMPONENT{component_index}_H
 """
-        return template.format(**locals())
+    return template.format(**locals())
 
-    def generate_component_source(self, component_index, deps):
-        include_directives = ''.join(['#include "component%s.h"\n' % index for index in deps + [component_index]])
+def _generate_component_source(component_index, deps):
+    include_directives = ''.join(['#include "component%s.h"\n' % index for index in deps + [component_index]])
 
-        component_deps = ', '.join(['std::shared_ptr<Interface%s>' % dep for dep in deps])
+    fields = ''.join(['Interface%s& x%s;\n' % (dep, dep)
+                      for dep in deps])
 
-        if self.use_fruit_2_x_syntax:
-            install_expressions = ''.join(['        .install(getComponent%s())\n' % dep for dep in deps])
-        else:
-            install_expressions = ''.join(['        .install(getComponent%s)\n' % dep for dep in deps])
+    component_deps = ', '.join(['Interface%s& x%s' % (dep, dep)
+                                for dep in deps])
+    param_initializers = ', '.join('x%s(x%s)' % (dep, dep)
+                                   for dep in deps)
+    if param_initializers:
+        param_initializers = ': ' + param_initializers
 
-        component_type = self._get_component_type(component_index)
+    install_expressions = ''.join(['        .install(getComponent%s)\n' % dep for dep in deps])
 
-        template = """
+    component_type = _get_component_type(component_index)
+
+    template = """
 {include_directives}
 
+namespace {{
 struct X{component_index} : public Interface{component_index} {{
-INJECT(X{component_index}({component_deps})) {{}}
+  {fields}
 
-virtual ~X{component_index}() = default;
+  INJECT(X{component_index}({component_deps})) {param_initializers} {{}}
+
+  virtual ~X{component_index}() = default;
 }};
-
-"""
-
-        if self.use_fruit_2_x_syntax:
-            template += """
-{component_type} getComponent{component_index}() {{
-    static {component_type} comp = fruit::createComponent(){install_expressions}
-        .bind<Interface{component_index}, X{component_index}>();
-    return comp;
 }}
+
 """
-        else:
-            template += """
+
+    template += """
 {component_type} getComponent{component_index}() {{
     return fruit::createComponent(){install_expressions}
         .bind<Interface{component_index}, X{component_index}>();
 }}
 """
 
-        return template.format(**locals())
+    return template.format(**locals())
 
-    def generate_main(self, toplevel_component):
-        if self.use_fruit_2_x_syntax:
-            return self.generate_main_with_fruit_2_x_syntax(toplevel_component)
-        else:
-            return self.generate_main_with_fruit_3_x_syntax(toplevel_component)
-
-    def generate_main_with_fruit_2_x_syntax(self, toplevel_component):
-        template = """
-#include "component{toplevel_component}.h"
-
-#include <ctime>
-#include <iostream>
-#include <cstdlib>
-#include <iomanip>
-#include <chrono>
-
-using namespace std;
-
-int main(int argc, char* argv[]) {{
-  if (argc != 2) {{
-    std::cout << "Need to specify num_loops as argument." << std::endl;
-    exit(1);
-  }}
-  size_t num_loops = std::atoi(argv[1]);
-  double componentCreationTime = 0;
-  double componentNormalizationTime = 0;
-  std::chrono::high_resolution_clock::time_point start_time;
-    
-  for (size_t i = 0; i < 1 + num_loops/100; i++) {{
-    start_time = std::chrono::high_resolution_clock::now();
-    fruit::Component<Interface{toplevel_component}> component(getComponent{toplevel_component}());
-    componentCreationTime += std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::high_resolution_clock::now() - start_time).count();
-    start_time = std::chrono::high_resolution_clock::now();
-    fruit::NormalizedComponent<Interface{toplevel_component}> normalizedComponent(std::move(component));
-    componentNormalizationTime += std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::high_resolution_clock::now() - start_time).count();
-  }}
-
-  start_time = std::chrono::high_resolution_clock::now();
-  for (size_t i = 0; i < 1 + num_loops/100; i++) {{
-    fruit::Injector<Interface{toplevel_component}> injector(getComponent{toplevel_component}());
-    injector.get<std::shared_ptr<Interface{toplevel_component}>>();
-  }}
-  double fullInjectionTime = std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::high_resolution_clock::now() - start_time).count();  
-
-  // The cast to Component<Interface{toplevel_component}> is needed for Fruit<2.1.0, where the constructor of
-  // NormalizedComponent only accepted a Component&&.
-  fruit::NormalizedComponent<Interface{toplevel_component}> normalizedComponent{{fruit::Component<Interface{toplevel_component}>{{getComponent{toplevel_component}()}}}};
-    
-  start_time = std::chrono::high_resolution_clock::now();
-  for (size_t i = 0; i < num_loops; i++) {{
-    fruit::Injector<Interface{toplevel_component}> injector(normalizedComponent, fruit::Component<>(fruit::createComponent()));
-    injector.get<std::shared_ptr<Interface{toplevel_component}>>();
-  }}
-  double perRequestTime = std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::high_resolution_clock::now() - start_time).count();
-
-  std::cout << std::fixed;
-  std::cout << std::setprecision(15);
-  std::cout << "componentNormalizationTime = " << componentNormalizationTime * 100 / num_loops << std::endl;
-  std::cout << "Total for setup            = " << (componentCreationTime + componentNormalizationTime) * 100 / num_loops << std::endl;
-  std::cout << "Full injection time        = " << fullInjectionTime * 100 / num_loops << std::endl;
-  std::cout << "Total per request          = " << perRequestTime / num_loops << std::endl;
-  return 0;
-}}
-    """
-        return template.format(**locals())
-
-    def generate_main_with_fruit_3_x_syntax(self, toplevel_component):
+def _generate_main(toplevel_component, generate_runtime_bench_code):
+    if generate_runtime_bench_code:
         template = """
 #include "component{toplevel_component}.h"
 
@@ -171,23 +119,9 @@ int main(int argc, char* argv[]) {{
   }}
   size_t num_loops = std::atoi(argv[1]);
   
-  std::chrono::high_resolution_clock::time_point start_time = std::chrono::high_resolution_clock::now();
-  for (size_t i = 0; i < 1 + num_loops/100; i++) {{
-    fruit::NormalizedComponent<Interface{toplevel_component}> normalizedComponent(getComponent{toplevel_component});
-    (void)normalizedComponent;
-  }}
-  double componentNormalizationTime = std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::high_resolution_clock::now() - start_time).count();
-
-  start_time = std::chrono::high_resolution_clock::now();
-  for (size_t i = 0; i < 1 + num_loops/100; i++) {{
-    fruit::Injector<Interface{toplevel_component}> injector(getComponent{toplevel_component});
-    injector.get<std::shared_ptr<Interface{toplevel_component}>>();
-  }}
-  double fullInjectionTime = std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::high_resolution_clock::now() - start_time).count();  
-
   fruit::NormalizedComponent<Interface{toplevel_component}> normalizedComponent(getComponent{toplevel_component});
     
-  start_time = std::chrono::high_resolution_clock::now();
+  std::chrono::high_resolution_clock::time_point start_time = std::chrono::high_resolution_clock::now();
   for (size_t i = 0; i < num_loops; i++) {{
     fruit::Injector<Interface{toplevel_component}> injector(normalizedComponent, getEmptyComponent);
     injector.get<std::shared_ptr<Interface{toplevel_component}>>();
@@ -196,11 +130,27 @@ int main(int argc, char* argv[]) {{
 
   std::cout << std::fixed;
   std::cout << std::setprecision(15);
-  std::cout << "componentNormalizationTime = " << componentNormalizationTime * 100 / num_loops << std::endl;
-  std::cout << "Total for setup            = " << componentNormalizationTime * 100 / num_loops << std::endl;
-  std::cout << "Full injection time        = " << fullInjectionTime * 100 / num_loops << std::endl;
   std::cout << "Total per request          = " << perRequestTime / num_loops << std::endl;
   return 0;
 }}
     """
-        return template.format(**locals())
+    else:
+        template = """
+#include "component{toplevel_component}.h"
+
+#include <iostream>
+
+fruit::Component<> getEmptyComponent() {{
+  return fruit::createComponent();
+}}
+
+int main(void) {{
+  fruit::NormalizedComponent<Interface{toplevel_component}> normalizedComponent(getComponent{toplevel_component});
+  fruit::Injector<Interface{toplevel_component}> injector(normalizedComponent, getEmptyComponent);
+  injector.get<std::shared_ptr<Interface{toplevel_component}>>();
+  std::cout << "Hello, world" << std::endl;
+  return 0;
+}}
+    """
+
+    return template.format(**locals())

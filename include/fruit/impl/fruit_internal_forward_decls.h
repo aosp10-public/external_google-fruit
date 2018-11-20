@@ -34,6 +34,9 @@ struct NormalizedMultibindingSet;
 struct InjectorAccessorForTests;
 
 template <typename Component, typename... Args>
+class ComponentInterfaceImpl;
+
+template <typename Component, typename... Args>
 class LazyComponentImpl;
 
 namespace meta {

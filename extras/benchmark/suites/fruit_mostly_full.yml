@@ -14,12 +14,13 @@
 
 global:
   max_runs: 20
+  max_hours_per_combination: 2
 
 # These values are ignored, they are here just to be referenced below.
 constants:
   compilers: &compilers
-    - "g++-7"
-    - "clang++-4.0"
+    - "g++-8"
+    - "clang++-6.0"
   num_classes: &num_classes
     - 100
     - 1000
@@ -39,6 +40,7 @@ benchmarks:
   - name:
       - "new_delete_run_time"
       - "fruit_compile_time"
+      - "fruit_incremental_compile_time"
       - "fruit_run_time"
       - "fruit_executable_size"
     loop_factor: 1.0
