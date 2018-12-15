@@ -3,7 +3,7 @@
 set -e
 
 apt-get update -qq
-apt-get install -y --no-install-recommends wget
+apt-get install -y --no-install-recommends wget gnupg
 
 wget -O - http://llvm.org/apt/llvm-snapshot.gpg.key | apt-key add -
 
@@ -21,16 +21,16 @@ apt-get install -y --allow-unauthenticated --no-install-recommends \
     cmake \
     libboost-dev \
     g++-5 \
-    clang-3.8 \
     clang-3.9 \
     clang-4.0 \
     libc++-dev \
     python3-pip \
     python3-setuptools \
+    python3-networkx \
     dirmngr
     
-pip3 install --upgrade pip
 pip3 install wheel
 pip3 install pytest
 pip3 install pytest-xdist
 pip3 install sh
+pip3 install bidict

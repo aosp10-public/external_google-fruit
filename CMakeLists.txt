@@ -58,10 +58,12 @@ set(FRUIT_USES_BOOST TRUE CACHE BOOL
         "Whether to use Boost (specifically, boost::unordered_set and boost::unordered_map).
         If this is false, Fruit will use std::unordered_set and std::unordered_map instead (however this causes injection to be a bit slower).")
 
-if("${WIN32}" AND "${FRUIT_USES_BOOST}")
+set(FRUIT_IS_BEING_BUILT_BY_CONAN FALSE CACHE BOOL "This is set in Conan builds.")
+
+if("${WIN32}" AND "${FRUIT_USES_BOOST}" AND NOT "${FRUIT_IS_BEING_BUILT_BY_CONAN}")
   set(BOOST_DIR "" CACHE PATH "The directory where the boost library is installed, e.g. C:\\boost\\boost_1_62_0.")
   if("${BOOST_DIR}" STREQUAL "")
-    message(FATAL_ERROR "Please re-run CMake, specifying the boost library path as BOOST_DIR, e.g. -DBOOST_DIR=C:\\boost\\boost_1_62_0.")
+    message(FATAL_ERROR "Please re-run CMake, specifying the boost library path as BOOST_DIR, e.g. -DBOOST_DIR=C:\\boost\\boost_1_62_0, or specify -DFRUIT_USES_BOOST=False to not use boost.")
   endif()
   include_directories("${BOOST_DIR}")
 endif()
@@ -72,7 +74,7 @@ if ("${RUN_TESTS_UNDER_VALGRIND}")
 endif()
 
 # Unsafe, only for debugging/benchmarking.
-#set(FRUIT_ADDITIONAL_COMPILE_FLAGS "${FRUIT_ADDITIONAL_COMPILE_FLAGS} -DFRUIT_NO_LOOP_CHECK")
+#set(FRUIT_ADDITIONAL_COMPILE_FLAGS "${FRUIT_ADDITIONAL_COMPILE_FLAGS} -DFRUIT_NO_LOOP_CHECK=1")
 
 add_definitions(${FRUIT_ADDITIONAL_COMPILE_FLAGS})
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${FRUIT_ADDITIONAL_LINKER_FLAGS}")
@@ -90,12 +92,12 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR}/include)
 
 # (debug-only) compile switch to get deep template instantiation stacktraces for errors (instead
 # of the user-friendly default that hides Fruit internals).
-#add_definitions(-DFRUIT_DEEP_TEMPLATE_INSTANTIATION_STACKTRACES_FOR_ERRORS)
+#add_definitions(-DFRUIT_DEEP_TEMPLATE_INSTANTIATION_STACKTRACES_FOR_ERRORS=1)
 
 set(INSTALL_INCLUDE_DIR include/fruit CACHE PATH "Installation directory for headers")
 set(INSTALL_LIBRARY_DIR lib CACHE PATH "Installation directory for libraries")
 
-set(FRUIT_VERSION "3.2.0")
+set(FRUIT_VERSION "3.4.0")
 
 add_subdirectory(configuration)
 add_subdirectory(src)

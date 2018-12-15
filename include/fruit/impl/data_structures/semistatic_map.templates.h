@@ -17,7 +17,7 @@
 #ifndef SEMISTATIC_MAP_TEMPLATES_H
 #define SEMISTATIC_MAP_TEMPLATES_H
 
-#ifndef IN_FRUIT_CPP_FILE
+#if !IN_FRUIT_CPP_FILE
 #error "Fruit .template.h file included in non-cpp file."
 #endif
 
@@ -40,7 +40,8 @@ namespace impl {
 
 template <typename Key, typename Value>
 template <typename Iter>
-SemistaticMap<Key, Value>::SemistaticMap(Iter values_begin, std::size_t num_values, MemoryPool& memory_pool) {
+SemistaticMap<Key, Value>::SemistaticMap(
+    Iter values_begin, Iter values_end, std::size_t num_values, MemoryPool& memory_pool) {
   NumBits num_bits = pickNumBits(num_values);
   std::size_t num_buckets = size_t(1) << num_bits;
 
@@ -57,8 +58,7 @@ SemistaticMap<Key, Value>::SemistaticMap(Iter values_begin, std::size_t num_valu
   while (1) {
     hash_function.a = random_distribution(random_generator);
 
-    Iter itr = values_begin;
-    for (std::size_t i = 0; i < num_values; ++i, ++itr) {
+    for (Iter itr = values_begin; !(itr == values_end); ++itr) {
       Unsigned& this_count = count[hash((*itr).first)];
       ++this_count;
       if (this_count == beta) {
@@ -68,9 +68,7 @@ SemistaticMap<Key, Value>::SemistaticMap(Iter values_begin, std::size_t num_valu
     break;
 
   pick_another:
-    for (std::size_t i = 0; i < num_buckets; ++i) {
-      count[i] = 0;
-    }
+    std::memset(count.data(), 0, num_buckets * sizeof(Unsigned));
   }
 
   values = FixedSizeVector<value_type>(num_values, value_type());
@@ -187,7 +185,7 @@ typename SemistaticMap<Key, Value>::NumBits SemistaticMap<Key, Value>::pickNumBi
   while ((std::size_t(1) << result) < n) {
     ++result;
   }
-  return result;
+  return result + 1;
 }
 
 // This is here so that we don't have to include fixed_size_vector.templates.h in fruit.h.

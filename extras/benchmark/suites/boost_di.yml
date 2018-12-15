@@ -14,22 +14,24 @@
 
 global:
   max_runs: 20
+  max_hours_per_combination: 2
 
 # These values are ignored, they are here just to be referenced below.
 constants:
   compilers: &compilers
-    - "g++-7"
-    - "clang++-4.0"
+    - "g++-8"
+    - "clang++-6.0"
 
 benchmarks:
   - name:
       - "boost_di_compile_time"
+      - "boost_di_incremental_compile_time"
       - "boost_di_run_time"
       - "boost_di_executable_size"
     loop_factor: 1.0
     num_classes:
       - 100
-      # Boost.DI fails to compile the generated example with 1000 classes.
+      - 1000
     compiler: *compilers
     cxx_std: "c++14"
     additional_cmake_args:
